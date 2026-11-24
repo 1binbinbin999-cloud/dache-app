@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity() {
         private const val ASSET_DOMAIN = "appassets.androidplatform.net"
         private const val ASSET_URL = "https://appassets.androidplatform.net/index.html"
         private const val VERSION_URL =
-            "https://raw.githubusercontent.com/1binbinbin999-cloud/dache/main/version.json"
+            "https://raw.githubusercontent.com/1binbinbin999-cloud/dache-app/main/version.json"
         private const val UPDATE_CHECK_DELAY_MS = 2000L
         private const val CONNECT_TIMEOUT_MS = 10_000
         private const val READ_TIMEOUT_MS = 10_000
@@ -314,7 +314,7 @@ class MainActivity : AppCompatActivity() {
                 // 下载新版前先清掉旧版本安装包。
                 cleanupOldUpdateApks()
                 val apkUrl =
-                    "https://github.com/1binbinbin999-cloud/dache/releases/download/v$version/dache-$version.apk"
+                    "https://github.com/1binbinbin999-cloud/dache-app/releases/download/v$version/dache-$version.apk"
                 val dir = File(cacheDir, "dache-update").apply { mkdirs() }
                 val apkFile = File(dir, "dache-$version.apk")
                 val connection = (URL(apkUrl).openConnection() as HttpURLConnection).apply {

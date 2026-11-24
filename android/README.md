@@ -60,11 +60,11 @@ APK 里的 bundle 与仓库里的 `web/` 一致。`app/src/main/assets/` 已加�
 - `window.DacheNative`：`getAppVersion()` 返回 `BuildConfig.VERSION_NAME`；
   `checkUpdate()` 触发更新检查；`openUrl(url)` 用系统浏览器打开。
 - 更新：启动 2 秒后自动检查一次（后台线程）。读
-  `https://raw.githubusercontent.com/1binbinbin999-cloud/dache/main/version.json`
+  `https://raw.githubusercontent.com/1binbinbin999-cloud/dache-app/main/version.json`
   （`Cache-Control: no-store`），取 `version` 与 `notes` 字段；按点分段比数字，
   有新版才在主线程弹 `AlertDialog`（标题“有新版 vX.Y.Z”，内容为 `notes`，
   按钮“更新”/“稍后”）。点“更新”后下载
-  `https://github.com/1binbinbin999-cloud/dache/releases/download/vX.Y.Z/dache-X.Y.Z.apk`
+  `https://github.com/1binbinbin999-cloud/dache-app/releases/download/vX.Y.Z/dache-X.Y.Z.apk`
   到 `cacheDir/dache-update/`，经 `FileProvider`（`${applicationId}.fileprovider`，
   只允许 `cache-path/dache-update/`）拉起系统安装。读不到 version.json 或下载失败时
   静默，不影响使用。需 `REQUEST_INSTALL_PACKAGES` 权限；Android 8+ 另需用户允许

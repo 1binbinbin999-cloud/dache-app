@@ -39,7 +39,7 @@ dotnet publish .\Dache.csproj -c Release -r win-x64 --self-contained true /p:Pub
 ## 更新方式
 
 - 启动 2 秒后自动在后台读一次
-  `https://raw.githubusercontent.com/1binbinbin999-cloud/dache/main/version.json`（不缓存），
+  `https://raw.githubusercontent.com/1binbinbin999-cloud/dache-app/main/version.json`（不缓存），
   按点分段比数字；有新版才弹框问要不要下载。
 - 用户确认后从 GitHub Releases 下载 `dache-X.Y.Z.exe` 到 `Downloads` 文件夹，
   下载完提示用户去 Downloads 运行新 EXE 覆盖旧的。

@@ -710,7 +710,7 @@ function fmtTime(iso){ if(!iso) return "暂无"; var d=new Date(iso); return isN
 function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
 
 var APP_VERSION = "0.1.1";
-var VERSION_URL = "https://raw.githubusercontent.com/1binbinbin999-cloud/dache/main/version.json";
+var VERSION_URL = "https://raw.githubusercontent.com/1binbinbin999-cloud/dache-app/main/version.json";
 var LS_REC = "dache.readings", LS_DEL = "dache.deleted", LS_SYNC = "dache.sync";
 var VAULT_KEY = "dache.vault", TOKEN_KEY = "dache.token";
 var sessionMasterKey = null; // 内存里的主密钥（32 字节 Uint8Array）；未解锁时为空
@@ -977,7 +977,7 @@ async function checkUpdate(silent){
     if (!latest) throw new Error("清单里没有版本号");
     if (cmpVer(latest, APP_VERSION) > 0){
       banner.className = "notice";
-      banner.innerHTML = "<b>有新版 v"+esc(latest)+"</b>：请到 <a href=\"https://github.com/1binbinbin999-cloud/dache/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a> 下载新安装包覆盖安装，记录不受影响。";
+      banner.innerHTML = "<b>有新版 v"+esc(latest)+"</b>：请到 <a href=\"https://github.com/1binbinbin999-cloud/dache-app/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a> 下载新安装包覆盖安装，记录不受影响。";
     } else {
       banner.classList.add("hidden");
     }

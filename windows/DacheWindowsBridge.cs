@@ -24,9 +24,9 @@ namespace Dache;
 public sealed class DacheWindowsBridge
 {
     private const string VersionJsonUrl =
-        "https://raw.githubusercontent.com/1binbinbin999-cloud/dache/main/version.json";
+        "https://raw.githubusercontent.com/1binbinbin999-cloud/dache-app/main/version.json";
     private const string ReleaseDownloadUrlFormat =
-        "https://github.com/1binbinbin999-cloud/dache/releases/download/v{0}/dache-{0}.exe";
+        "https://github.com/1binbinbin999-cloud/dache-app/releases/download/v{0}/dache-{0}.exe";
 
     private static readonly HttpClient Http = new HttpClient
     {
