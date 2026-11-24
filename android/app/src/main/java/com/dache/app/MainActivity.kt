@@ -69,6 +69,10 @@ class MainActivity : AppCompatActivity() {
 
         securePrefs = createSecurePrefs()
 
+        // 清掉上次安装后留在 cacheDir/dache-update/ 里的旧安装包。
+        // 只在启动时清：安装 intent 用 FileProvider 读这个 APK，调起安装后不能立刻删。
+        cleanupOldUpdateApks()
+
         // assets/ 根目录映射到域名根路径：assets/index.html 就是
         // https://appassets.androidplatform.net/index.html，assets/ 子目录原样对应。
         assetLoader = WebViewAssetLoader.Builder()
@@ -96,13 +100,14 @@ class MainActivity : AppCompatActivity() {
                     request: WebResourceRequest
                 ): Boolean {
                     val uri = request.url
-                    // 站内（asset 域名）留在 WebView 里；站外 http/https 交系统浏览器。
+                    // 站内（asset 域名）留在 WebView 里；站外 http/https 交系统浏览器；
+                    // 其他 scheme 一律拦截，不留在 WebView 里（带着桥，不安全）。
                     if (uri.scheme == "https" && uri.host == ASSET_DOMAIN) return false
                     if (uri.scheme == "http" || uri.scheme == "https") {
                         openExternal(uri.toString())
                         return true
                     }
-                    return false
+                    return true
                 }
             }
             webChromeClient = WebChromeClient()
@@ -174,6 +179,11 @@ class MainActivity : AppCompatActivity() {
      */
     inner class SecureBridge {
         @JavascriptInterface
+        fun isStoreAvailable(): Boolean {
+            return securePrefs != null
+        }
+
+        @JavascriptInterface
         fun getItem(key: String): String? {
             return try {
                 securePrefs?.getString(key, null)
@@ -184,20 +194,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun setItem(key: String, value: String) {
-            try {
-                securePrefs?.edit()?.putString(key, value)?.apply()
+        fun setItem(key: String, value: String): Boolean {
+            return try {
+                securePrefs?.edit()?.putString(key, value)?.commit() ?: false
             } catch (e: Exception) {
                 Log.e(TAG, "DacheSecure.setItem 失败", e)
+                false
             }
         }
 
         @JavascriptInterface
-        fun removeItem(key: String) {
-            try {
-                securePrefs?.edit()?.remove(key)?.apply()
+        fun removeItem(key: String): Boolean {
+            return try {
+                securePrefs?.edit()?.remove(key)?.commit() ?: false
             } catch (e: Exception) {
                 Log.e(TAG, "DacheSecure.removeItem 失败", e)
+                false
             }
         }
     }
@@ -214,6 +226,12 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun openUrl(url: String) {
+            // 只放行 http/https，其他 scheme 直接忽略，不拉起 intent。
+            val scheme = Uri.parse(url).scheme
+            if (scheme != "http" && scheme != "https") {
+                Log.w(TAG, "DacheNative.openUrl 拒绝非 http(s) 链接：$url")
+                return
+            }
             openExternal(url)
         }
     }
@@ -288,6 +306,13 @@ class MainActivity : AppCompatActivity() {
     private fun downloadAndInstall(version: String) {
         Thread {
             try {
+                // 版本号先校验再拼 URL：不符合 ^\d+(\.\d+){1,3}$ 就不下载。
+                if (!Regex("""^\d+(\.\d+){1,3}$""").matches(version.trim())) {
+                    Log.w(TAG, "APK 下载拒绝：版本号不合法：$version")
+                    return@Thread
+                }
+                // 下载新版前先清掉旧版本安装包。
+                cleanupOldUpdateApks()
                 val apkUrl =
                     "https://github.com/1binbinbin999-cloud/dache/releases/download/v$version/dache-$version.apk"
                 val dir = File(cacheDir, "dache-update").apply { mkdirs() }
@@ -317,6 +342,28 @@ class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "APK 下载失败（静默）", e)
             }
         }.start()
+    }
+
+    /**
+     * 删掉 cacheDir/dache-update/ 里全部 dache-*.apk（旧版本安装包）。
+     * 只在两个时点调：onCreate()（下次启动，清上次安装后留下的包）和
+     * downloadAndInstall() 下载新版前。绝不在调起安装后立刻删——安装 intent
+     * 用 FileProvider 读这个 APK 文件，删早了装不上。
+     */
+    private fun cleanupOldUpdateApks() {
+        try {
+            val dir = File(cacheDir, "dache-update")
+            if (!dir.isDirectory) return
+            dir.listFiles { file ->
+                file.isFile && file.name.startsWith("dache-") && file.name.endsWith(".apk")
+            }?.forEach { file ->
+                if (!file.delete()) {
+                    Log.w(TAG, "旧安装包删除失败：${file.name}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "清理旧安装包失败", e)
+        }
     }
 
     private fun installApk(apkFile: File) {

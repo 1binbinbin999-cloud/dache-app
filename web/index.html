@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark" />
+<!-- CSP：内联脚本/样式仍放行（本应用 5 段脚本里 4 段是内联的），只禁插件、限制 base、限制资源来源。导入备份的 XSS 主防线是 esc + 字段校验。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob:; script-src 'unsafe-inline' 'self' https:; style-src 'unsafe-inline' 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; connect-src 'self' https:;" />
 <link rel="icon" href="data:," />
 <title>大车</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -492,6 +494,7 @@ footer{border-top:1px solid var(--border);margin-top:48px;padding:18px 0;color:v
       <input id="setup-token" type="password" autocomplete="off" placeholder="可留空，跳过则不同步" />
       <p class="err" id="setup-err"></p>
       <button class="btn primary" id="setup-submit" type="button" style="width:100%">设好，进入大车</button>
+      <p style="margin:12px 0 0;text-align:center"><button class="linkbtn" id="setup-recover" type="button">已在别的设备上设置过？从云端恢复保险库</button></p>
     </div>
     <!-- 锁屏解锁 -->
     <div id="lock-unlock" class="card hidden">
@@ -515,6 +518,13 @@ footer{border-top:1px solid var(--border);margin-top:48px;padding:18px 0;color:v
       <p class="err" id="reset-err"></p>
       <button class="btn primary" id="reset-submit" type="button" style="width:100%">重置密码并进入</button>
       <p style="margin:12px 0 0;text-align:center"><button class="linkbtn" id="reset-back" type="button">返回输密码</button></p>
+    </div>
+    <!-- 存储异常：安全存储不可用或保险库损坏，绝不能进首次设置（会覆盖主密钥、丢云端数据） -->
+    <div id="lock-storage-error" class="card hidden">
+      <h2 style="margin-top:0">存储异常，进不去</h2>
+      <p class="small dim" id="lock-storage-err">安全存储不可用。</p>
+      <p class="small dim">不要重新设置密码——重新设置会生成一把新钥匙，云端旧数据就永远解不开了。先试试：重启应用；检查系统锁屏是否被改过；如果刚从备份还原，可能是系统密钥库对不上。恢复后点下面重试。</p>
+      <button class="btn primary" id="storage-retry" type="button" style="width:100%">重试</button>
     </div>
   </div>
 </div>
@@ -699,7 +709,7 @@ function nowISO(){ return new Date().toISOString(); }
 function fmtTime(iso){ if(!iso) return "暂无"; var d=new Date(iso); return isNaN(d.getTime())?"暂无":d.toLocaleString("zh-CN",{hour12:false}); }
 function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
 
-var APP_VERSION = "0.1.0";
+var APP_VERSION = "0.1.1";
 var VERSION_URL = "https://raw.githubusercontent.com/1binbinbin999-cloud/dache/main/version.json";
 var LS_REC = "dache.readings", LS_DEL = "dache.deleted", LS_SYNC = "dache.sync";
 var VAULT_KEY = "dache.vault", TOKEN_KEY = "dache.token";
@@ -709,40 +719,62 @@ function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){
 
 /* ================= SecureStore：原生桥优先，不存在回退 localStorage =================
    只存两样：dache.vault（保险库对象 JSON 字符串）和 dache.token（GitHub 令牌字符串）。
-   记录 / 墓碑 / 同步配置继续用原有 localStorage 键，不动。 */
+   记录 / 墓碑 / 同步配置继续用原有 localStorage 键，不动。
+   桥约定（v0.1.1）：DacheSecure.isStoreAvailable() 返回安全存储是否可用；
+   setItem/removeItem 返回 Boolean（commit() 成败）；getItem 返回值或 null。
+   存储不可用时 get/set/remove 抛错，绝不静默回退写明文、绝不把“读失败”当成“没有保险库”。 */
 var SecureStore = {
   hasBridge: function(){ return !!(window.DacheSecure && typeof window.DacheSecure.getItem === "function" && typeof window.DacheSecure.setItem === "function"); },
+  isAvailable: async function(){
+    if (!this.hasBridge()) return true; // 没有桥（网页版）时 localStorage 即存储，假定可用
+    try{
+      if (typeof window.DacheSecure.isStoreAvailable === "function"){
+        return !!(await window.DacheSecure.isStoreAvailable());
+      }
+      return true; // 旧版桥没有 isStoreAvailable，假定可用
+    }catch(e){ return false; }
+  },
   get: async function(k){
     if (this.hasBridge()){
-      try{ var v = await window.DacheSecure.getItem(k); if (v != null) return String(v); /* 桥里没有则继续看 localStorage（桥是后来才出现时，旧保险库还在本机） */ }catch(e){ /* 桥失败则回退 */ }
+      if (!(await this.isAvailable())) throw new Error("安全存储不可用");
+      var v = await window.DacheSecure.getItem(k);
+      if (v != null) return String(v); /* 桥里没有则继续看 localStorage（桥是后来才出现时，旧保险库还在本机） */
     }
     try{ return localStorage.getItem(k); }catch(e){ return null; }
   },
   set: async function(k, v){
     if (this.hasBridge()){
-      try{ await window.DacheSecure.setItem(k, String(v)); return; }catch(e){ /* 桥失败则回退 */ }
+      if (!(await this.isAvailable())) throw new Error("安全存储不可用");
+      return !!(await window.DacheSecure.setItem(k, String(v)));
     }
-    try{ localStorage.setItem(k, String(v)); }catch(e){}
+    try{ localStorage.setItem(k, String(v)); return true; }catch(e){ return false; }
   },
   remove: async function(k){
     if (this.hasBridge()){
-      try{ await window.DacheSecure.removeItem(k); return; }catch(e){ /* 桥失败则回退 */ }
+      if (!(await this.isAvailable())) throw new Error("安全存储不可用");
+      return !!(await window.DacheSecure.removeItem(k));
     }
-    try{ localStorage.removeItem(k); }catch(e){}
+    try{ localStorage.removeItem(k); return true; }catch(e){ return false; }
   }
 };
 
 /* ================= 保险库（Web Crypto，全部异步） =================
-   vault 结构：{v:1, saltPwd, saltRec, wrapPwd:{iv,ct}, wrapRec:{iv,ct}, check:{iv,ct}}
+   vault 结构 v2：{v:2, iter:600000, at:时间戳, saltPwd, saltRec, wrapPwd:{iv,ct}, wrapRec:{iv,ct}, check:{iv,ct}}
+   旧 v1（无 iter/at 字段）仍兼容：iter 按 250000，at 按 0。
    - 主密钥：32 字节随机，只放内存（sessionMasterKey），不落盘。
-   - 密码 / 恢复码各一个独立盐，PBKDF2-HMAC-SHA256 250000 次派生 AES-256-GCM 密钥，分别包主密钥。
+   - 密码 / 恢复码各一个独立盐，PBKDF2-HMAC-SHA256 派生 AES-256-GCM 密钥，分别包主密钥；新保险库 600000 次（OWASP 2023 对 SHA-256 的推荐）。
+   - 密码先 .normalize("NFKC") 再编码：中文输入法在不同设备上的组合形态可能不同，不归一化会换设备解不开。
    - check：主密钥加密固定明文 "dache-ok"，用于验证解锁是否正确。
+   - at：保险库创建时间戳，多设备同步时新的覆盖旧的。
    只存密文与盐，不存密码、恢复码、主密钥的任何明文。 */
+var VAULT_ITER_V2 = 600000, VAULT_ITER_V1 = 250000;
 function randBytes(n){ return crypto.getRandomValues(new Uint8Array(n)); }
-async function deriveWrapKey(secret, saltB64){
-  var base = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), {name:"PBKDF2"}, false, ["deriveKey"]);
+async function deriveWrapKey(secret, saltB64, iterations){
+  var it = iterations || VAULT_ITER_V2;
+  var norm = String(secret).normalize("NFKC");
+  var base = await crypto.subtle.importKey("raw", new TextEncoder().encode(norm), {name:"PBKDF2"}, false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
-    {name:"PBKDF2", salt:unb64(saltB64), iterations:250000, hash:"SHA-256"},
+    {name:"PBKDF2", salt:unb64(saltB64), iterations:it, hash:"SHA-256"},
     base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
 }
 async function wrapWithKey(key, dataBytes){
@@ -761,26 +793,61 @@ async function checkMaster(bytes){
   return new TextDecoder().decode(pt) === "dache-ok";
 }
 var currentVault = null;
+// loadVault 返回 {status:"ok",vault} / {status:"none"} / {status:"error",message}
+// 存储不可用或保险库损坏时绝不返回 null 冒充“没有保险库”，否则 bootGate 会进首次设置、覆盖主密钥丢数据。
 async function loadVault(){
-  var raw = await SecureStore.get(VAULT_KEY);
-  if (!raw) return null;
-  try{ var v = JSON.parse(raw); return (v && v.wrapPwd && v.wrapRec && v.check) ? v : null; }
-  catch(e){ return null; }
+  var avail;
+  try{ avail = await SecureStore.isAvailable(); }catch(e){ avail = false; }
+  if (!avail) return {status:"error", message:"安全存储不可用（系统密钥库异常）。不要重新设置密码，先检查系统锁屏或重装前备份记录。"};
+  var raw;
+  try{ raw = await SecureStore.get(VAULT_KEY); }catch(e){ return {status:"error", message:"安全存储读取失败：" + e.message + "。不要重新设置密码。"}; }
+  if (!raw) return {status:"none"};
+  try{
+    var v = JSON.parse(raw);
+    if (v && v.wrapPwd && v.wrapRec && v.check) return {status:"ok", vault:v};
+    return {status:"error", message:"保险库数据损坏，无法解锁。不要重新设置密码（会覆盖云端数据的钥匙），先从另一台设备或云端恢复。"};
+  }catch(e){ return {status:"error", message:"保险库数据损坏，无法解析。不要重新设置密码。"}; }
 }
-async function saveVault(v){ currentVault = v; await SecureStore.set(VAULT_KEY, JSON.stringify(v)); }
+// saveVault：写盘失败抛错；写完读回校验，确认一致才算存好，再进应用。
+async function saveVault(v){
+  var ok = await SecureStore.set(VAULT_KEY, JSON.stringify(v));
+  if (!ok) throw new Error("保险库保存失败（安全存储不可用）");
+  var back = await SecureStore.get(VAULT_KEY);
+  if (back !== JSON.stringify(v)) throw new Error("保险库保存后校验失败（读回不一致）");
+  currentVault = v;
+}
 function clearSecretInputs(){ ["setup-pwd1","setup-pwd2","setup-rec1","setup-rec2","setup-token","unlock-pwd","reset-rec","reset-pwd1","reset-pwd2"].forEach(function(id){ var el=$(id); if(el) el.value=""; }); }
 
 /* ================= 密码门 ================= */
 function showLockPanel(which){
   $("lock-screen").classList.remove("hidden");
   $("shell").classList.add("hidden");
-  ["lock-setup","lock-unlock","lock-reset"].forEach(function(id){ $(id).classList.toggle("hidden", id !== which); });
+  ["lock-setup","lock-unlock","lock-reset","lock-storage-error"].forEach(function(id){ $(id).classList.toggle("hidden", id !== which); });
 }
 async function bootGate(){
-  currentVault = await loadVault();
-  if (!currentVault){ showLockPanel("lock-setup"); }
-  else { showLockPanel("lock-unlock"); }
+  var r = await loadVault();
+  if (r.status === "ok"){ currentVault = r.vault; showLockPanel("lock-unlock"); return; }
+  if (r.status === "error"){ $("lock-storage-err").textContent = r.message; showLockPanel("lock-storage-error"); return; }
+  // 本机没有保险库：试试从云端恢复（新设备 / 重装后，令牌已在本机时）；8 秒超时，超时走首次设置
+  var token = null;
+  try{ token = await SecureStore.get(TOKEN_KEY); }catch(e){ token = null; }
+  if (token){
+    try{
+      var cfg = syncCfg();
+      var headers = {Accept:"application/vnd.github+json", Authorization:"Bearer "+token};
+      var timeout = new Promise(function(_, rej){ setTimeout(function(){ rej(new Error("云端恢复超时")); }, 8000); });
+      var cv = await Promise.race([fetchCloudVault(headers, cfg), timeout]);
+      if (cv.vault){
+        await saveVault(cv.vault);
+        currentVault = cv.vault;
+        showLockPanel("lock-unlock");
+        return;
+      }
+    }catch(e){ /* 云端恢复失败或超时，走首次设置 */ }
+  }
+  showLockPanel("lock-setup");
 }
+$("storage-retry").addEventListener("click", function(){ bootGate(); });
 function enterApp(){
   $("lock-screen").classList.add("hidden");
   $("shell").classList.remove("hidden");
@@ -793,30 +860,50 @@ $("setup-submit").addEventListener("click", async function(){
   var pwd1=$("setup-pwd1").value, pwd2=$("setup-pwd2").value;
   var rec1=$("setup-rec1").value, rec2=$("setup-rec2").value;
   var token=$("setup-token").value.trim();
-  if (!pwd1 || pwd1.length < 4){ err.textContent = "进入密码至少 4 位。"; return; }
+  if (!pwd1 || pwd1.length < 8){ err.textContent = "进入密码至少 8 位。"; return; }
   if (pwd1 !== pwd2){ err.textContent = "两次输入的进入密码不一致。"; return; }
-  if (!rec1 || rec1.length < 4){ err.textContent = "恢复码至少 4 位。"; return; }
+  if (!rec1 || rec1.length < 8){ err.textContent = "恢复码至少 8 位（恢复码由你自己定，忘密码时用它重置）。"; return; }
   if (rec1 !== rec2){ err.textContent = "两次输入的恢复码不一致。"; return; }
   if (pwd1 === rec1){ err.textContent = "恢复码不要和进入密码设成一样。"; return; }
   var btn = $("setup-submit"); btn.disabled = true; btn.textContent = "正在生成保险库…";
   try{
     var master = randBytes(32);
     var saltPwd = b64(randBytes(16)), saltRec = b64(randBytes(16));
-    var pwdKey = await deriveWrapKey(pwd1, saltPwd);
-    var recKey = await deriveWrapKey(rec1, saltRec);
+    var pwdKey = await deriveWrapKey(pwd1, saltPwd, VAULT_ITER_V2);
+    var recKey = await deriveWrapKey(rec1, saltRec, VAULT_ITER_V2);
     var wrapPwd = await wrapWithKey(pwdKey, master);
     var wrapRec = await wrapWithKey(recKey, master);
     var mKey = await masterKeyObj(master);
     var checkIv = randBytes(12);
     var checkCt = await crypto.subtle.encrypt({name:"AES-GCM", iv:checkIv}, mKey, new TextEncoder().encode("dache-ok"));
-    var vault = {v:1, saltPwd:saltPwd, saltRec:saltRec, wrapPwd:wrapPwd, wrapRec:wrapRec, check:{iv:b64(checkIv), ct:b64(checkCt)}};
+    var vault = {v:2, iter:VAULT_ITER_V2, at:Date.now(), saltPwd:saltPwd, saltRec:saltRec, wrapPwd:wrapPwd, wrapRec:wrapRec, check:{iv:b64(checkIv), ct:b64(checkCt)}};
     await saveVault(vault);
-    if (token) await SecureStore.set(TOKEN_KEY, token);
+    // 令牌没存上不阻塞进应用（进去后在首页同步卡片里再设）
+    if (token){ try{ await SecureStore.set(TOKEN_KEY, token); }catch(e){} }
     sessionMasterKey = master;
     clearSecretInputs();
     enterApp();
   }catch(e){ err.textContent = "设置失败：" + e.message + "，再试一次。"; }
   finally{ btn.disabled = false; btn.textContent = "设好，进入大车"; }
+});
+// 新设备：已在别的设备上设置过，粘贴令牌后从云端拉保险库，用同一个密码解锁（不生成新钥匙）
+$("setup-recover").addEventListener("click", async function(){
+  var err = $("setup-err"); err.textContent = "";
+  var token = $("setup-token").value.trim();
+  if (!token){ err.textContent = "先在上面粘贴 GitHub 同步令牌，再点恢复。"; return; }
+  var btn = $("setup-recover"); btn.disabled = true; btn.textContent = "正在从云端恢复…";
+  try{
+    await SecureStore.set(TOKEN_KEY, token);
+    var cfg = syncCfg();
+    var headers = {Accept:"application/vnd.github+json", Authorization:"Bearer "+token};
+    var cv = await fetchCloudVault(headers, cfg);
+    if (!cv.vault){ err.textContent = "云端没有保险库（这台设备可能是第一台，直接在上面设置密码即可）。"; return; }
+    await saveVault(cv.vault);
+    currentVault = cv.vault;
+    clearSecretInputs();
+    showLockPanel("lock-unlock");
+  }catch(e){ err.textContent = "恢复失败：" + e.message; }
+  finally{ btn.disabled = false; btn.textContent = "已在别的设备上设置过？从云端恢复保险库"; }
 });
 $("unlock-submit").addEventListener("click", async function(){
   var err = $("unlock-err"); err.textContent = "";
@@ -824,7 +911,7 @@ $("unlock-submit").addEventListener("click", async function(){
   if (!pwd){ err.textContent = "先输入密码。"; return; }
   var btn = $("unlock-submit"); btn.disabled = true; btn.textContent = "解锁中…";
   try{
-    var pwdKey = await deriveWrapKey(pwd, currentVault.saltPwd);
+    var pwdKey = await deriveWrapKey(pwd, currentVault.saltPwd, currentVault.iter || VAULT_ITER_V1);
     var master = await unwrapWithKey(pwdKey, currentVault.wrapPwd);
     if (!(await checkMaster(master))) throw new Error("check 不匹配");
     sessionMasterKey = master;
@@ -840,18 +927,19 @@ $("reset-submit").addEventListener("click", async function(){
   var err = $("reset-err"); err.textContent = "";
   var rec = $("reset-rec").value, pwd1 = $("reset-pwd1").value, pwd2 = $("reset-pwd2").value;
   if (!rec){ err.textContent = "先输入恢复码。"; return; }
-  if (!pwd1 || pwd1.length < 4){ err.textContent = "新密码至少 4 位。"; return; }
+  if (!pwd1 || pwd1.length < 8){ err.textContent = "新密码至少 8 位。"; return; }
   if (pwd1 !== pwd2){ err.textContent = "两次输入的新密码不一致。"; return; }
   var btn = $("reset-submit"); btn.disabled = true; btn.textContent = "重置中…";
   try{
-    var recKey = await deriveWrapKey(rec, currentVault.saltRec);
+    var recKey = await deriveWrapKey(rec, currentVault.saltRec, currentVault.iter || VAULT_ITER_V1);
     var master = await unwrapWithKey(recKey, currentVault.wrapRec);
     if (!(await checkMaster(master))) throw new Error("check 不匹配");
     // 恢复码正确：只重包 wrapPwd（新盐 + 新密码派生），wrapRec 与盐不动，记录与同步钥匙不断。
+    // 新保险库升到 v2（600000 次），恢复码本身不变、仍由用户自定。
     var saltPwd = b64(randBytes(16));
-    var pwdKey = await deriveWrapKey(pwd1, saltPwd);
+    var pwdKey = await deriveWrapKey(pwd1, saltPwd, VAULT_ITER_V2);
     var wrapPwd = await wrapWithKey(pwdKey, master);
-    var vault = {v:1, saltPwd:saltPwd, saltRec:currentVault.saltRec, wrapPwd:wrapPwd, wrapRec:currentVault.wrapRec, check:currentVault.check};
+    var vault = {v:2, iter:VAULT_ITER_V2, at:Date.now(), saltPwd:saltPwd, saltRec:currentVault.saltRec, wrapPwd:wrapPwd, wrapRec:currentVault.wrapRec, check:currentVault.check};
     await saveVault(vault);
     sessionMasterKey = master;
     clearSecretInputs();
@@ -906,7 +994,8 @@ function syncCfg(){
 /* 首页同步卡片：状态 + 立即同步 + 设置令牌 */
 async function renderSyncMini(){
   var el = $("sync-mini"); if (!el) return;
-  var hasToken = !!(await SecureStore.get(TOKEN_KEY));
+  var hasToken = false;
+  try{ hasToken = !!(await SecureStore.get(TOKEN_KEY)); }catch(e){ hasToken = false; }
   var cfg = syncCfg();
   el.innerHTML =
     '<div class="card">'
@@ -937,13 +1026,15 @@ async function renderSyncMini(){
   $("sync-token-save").addEventListener("click", async function(){
     var v = $("sync-token-input").value.trim();
     if (!v){ var st=$("sync-status"); if (st) st.textContent = "令牌是空的，没保存。"; return; }
-    await SecureStore.set(TOKEN_KEY, v);
+    var ok = false;
+    try{ ok = await SecureStore.set(TOKEN_KEY, v); }catch(e){ ok = false; }
+    if (!ok){ var st2=$("sync-status"); if (st2) st2.textContent = "令牌没存上：安全存储不可用。"; return; }
     $("sync-token-input").value = "";
     $("sync-token-form").classList.add("hidden");
     renderSyncMini();
   });
   $("sync-token-clear").addEventListener("click", async function(){
-    await SecureStore.remove(TOKEN_KEY);
+    try{ await SecureStore.remove(TOKEN_KEY); }catch(e){ var st=$("sync-status"); if (st) st.textContent = "令牌没清掉：安全存储不可用。"; return; }
     $("sync-token-input").value = "";
     $("sync-token-form").classList.add("hidden");
     renderSyncMini();
@@ -989,13 +1080,99 @@ function mergeData(local, remote){
   return {readings:readings, deleted:del};
 }
 
+/* ---- GitHub 取文件：文件 >1MB 时 contents API 不返回 content，改走 /git/blobs/{sha} ---- */
+async function ghGetFile(api, headers){
+  var res = await fetch(api, {headers:headers, cache:"no-store"});
+  if (res.status === 404) return {json:null, sha:null};
+  if (!res.ok) throw new Error("读取云端失败（"+res.status+"）");
+  var j = await res.json();
+  var b64content = j.content || "";
+  if (!b64content && j.sha){
+    var bres = await fetch(api.replace(/\/contents\/.*$/, "/git/blobs/"+encodeURIComponent(j.sha)), {headers:headers, cache:"no-store"});
+    if (!bres.ok) throw new Error("读取云端大文件失败（"+bres.status+"）");
+    var bj = await bres.json();
+    b64content = bj.content || "";
+  }
+  var text = new TextDecoder().decode(unb64(b64content.replace(/\n/g,"")));
+  return {json:JSON.parse(text), sha:j.sha};
+}
+
+/* ---- 保险库同步（多设备共用同一把钥匙）：保险库本身也是密文，放进 dache-sync 仓库 ---- */
+var VAULT_FILE = "dache.vault.json";
+function vaultApi(cfg){ return "https://api.github.com/repos/"+encodeURIComponent(cfg.owner)+"/"+encodeURIComponent(cfg.repo)+"/contents/"+VAULT_FILE; }
+async function fetchCloudVault(headers, cfg){
+  var r = await ghGetFile(vaultApi(cfg), headers);
+  if (!r.json) return {vault:null, sha:null};
+  var v = r.json;
+  if (v && v.wrapPwd && v.wrapRec && v.check) return {vault:v, sha:r.sha};
+  throw new Error("云端保险库格式不对");
+}
+async function putCloudVault(vault, headers, cfg, sha){
+  var body = {message:"dache vault "+new Date().toISOString(), content:b64(new TextEncoder().encode(JSON.stringify(vault)))};
+  if (sha) body.sha = sha;
+  return await fetch(vaultApi(cfg), {method:"PUT", headers:headers, cache:"no-store", body:JSON.stringify(body)});
+}
+/* 同步保险库：本机与云端以 at 时间戳为准，新的覆盖旧的。
+   返回 {changed, needRelock, message}。needRelock 为真表示主密钥已换，须重新解锁。 */
+async function syncVault(headers, cfg){
+  if (!currentVault) return {changed:false, needRelock:false, message:""};
+  var cv = await fetchCloudVault(headers, cfg);
+  if (!cv.vault){
+    var pr = await putCloudVault(currentVault, headers, cfg, null);
+    if (!pr.ok) return {changed:false, needRelock:false, message:"保险库上传云端失败（"+pr.status+"），记录同步继续。"};
+    return {changed:true, needRelock:false, message:""};
+  }
+  if (JSON.stringify(cv.vault) === JSON.stringify(currentVault)) return {changed:false, needRelock:false, message:""};
+  var cloudAt = cv.vault.at || 0, localAt = currentVault.at || 0;
+  if (cloudAt > localAt){
+    // 云端更新（另一台设备改过设置）→ 采用云端保险库
+    await saveVault(cv.vault);
+    // 改密码不换主密钥（只重包），全新设置才换主密钥；校验一下内存里的主密钥还对不对
+    var ok = false;
+    try{ ok = sessionMasterKey ? await checkMaster(sessionMasterKey) : false; }catch(e){ ok = false; }
+    if (!ok) return {changed:true, needRelock:true, message:"已采用云端保险库（另一台设备改过设置），请用最新密码重新解锁。"};
+    return {changed:true, needRelock:false, message:"已采用云端保险库（另一台设备改过密码）。"};
+  }
+  // 本机更新 → 上传本机保险库
+  var pr2 = await putCloudVault(currentVault, headers, cfg, cv.sha);
+  if (!pr2.ok) return {changed:false, needRelock:false, message:"保险库上传云端失败（"+pr2.status+"），记录同步继续。"};
+  return {changed:true, needRelock:false, message:""};
+}
+
+/* ---- 记录同步（一次）：读云端 → 合并 → 写回 ---- */
+async function syncRecordsOnce(api, headers, cfg){
+  var local = {readings:getReadings(), deleted:getDeleted()};
+  var sha = null, remote = {readings:[], deleted:{}};
+  var r = await ghGetFile(api, headers);
+  if (r.json){
+    sha = r.sha;
+    var env = r.json;
+    try{
+      if (env.v === 2){ remote = await decryptEnvelopeV2(env); }
+      else throw new Error("云端文件版本不受支持");
+    }catch(e){ return {ok:false, status:0, message:"云端文件解不开：本机同步钥匙与云端文件不一致。"}; }
+  }
+  var merged = mergeData(local, remote);
+  setReadings(merged.readings); setDeleted(merged.deleted);
+  var env2 = await encryptEnvelopeV2(merged);
+  var body = {message:"dache sync "+new Date().toISOString(), content:b64(new TextEncoder().encode(JSON.stringify(env2)))};
+  if (sha) body.sha = sha;
+  var put = await fetch(api, {method:"PUT", headers:headers, cache:"no-store", body:JSON.stringify(body)});
+  if (!put.ok){
+    if (put.status === 409) return {ok:false, status:409, message:"写回云端冲突（409），正在重试。"};
+    return {ok:false, status:put.status, message:"写回云端失败（"+put.status+"），本机已合并远端数据。"};
+  }
+  return {ok:true, status:200, message:"同步完成：本机共 "+merged.readings.length+" 条记录，已加密写回 "+cfg.owner+"/"+cfg.repo+"。"};
+}
+
 var syncBusy = false;
 async function runSync(manual){
   var st = $("sync-status");
   var cfg = syncCfg();
   if (!cfg.owner){ return; }
   if (!sessionMasterKey){ if (st) st.textContent = "未解锁，无法同步。"; return; }
-  var token = await SecureStore.get(TOKEN_KEY);
+  var token = null;
+  try{ token = await SecureStore.get(TOKEN_KEY); }catch(e){ if (st) st.textContent = "同步失败：安全存储不可用。"; return; }
   if (!token){ if (st) st.textContent = "未设置同步令牌：点“设置令牌”粘贴 GitHub 令牌后即可同步，记录先只存本机。"; return; }
   if (syncBusy) return;
   syncBusy = true;
@@ -1003,31 +1180,30 @@ async function runSync(manual){
   var api = "https://api.github.com/repos/"+encodeURIComponent(cfg.owner)+"/"+encodeURIComponent(cfg.repo)+"/contents/dache.enc.json";
   var headers = {Accept:"application/vnd.github+json", Authorization:"Bearer "+token};
   try{
-    var local = {readings:getReadings(), deleted:getDeleted()};
-    var sha = null, remote = {readings:[], deleted:{}};
-    var res = await fetch(api, {headers:headers});
-    if (res.status === 200){
-      var j = await res.json(); sha = j.sha;
-      var env = JSON.parse(new TextDecoder().decode(unb64(j.content.replace(/\n/g,""))));
-      try{
-        if (env.v === 2){
-          remote = await decryptEnvelopeV2(env);
-        }
-        else throw new Error("云端文件版本不受支持");
-      }
-      catch(e){ if (st) st.textContent = "云端文件解不开：本机同步钥匙与云端文件不一致。"; return; }
+    // 先同步保险库（多设备共用同一把钥匙）
+    var sv = null;
+    try{ sv = await syncVault(headers, cfg); }catch(e){ sv = {changed:false, needRelock:false, message:"保险库同步失败："+e.message+"，记录同步继续。"}; }
+    if (sv && sv.needRelock){
+      sessionMasterKey = null;
+      if (st) st.textContent = sv.message;
+      showLockPanel("lock-unlock");
+      return;
     }
-    else if (res.status !== 404){ if (st) st.textContent = "读取云端失败（"+res.status+"）。"; return; }
-    var merged = mergeData(local, remote);
-    setReadings(merged.readings); setDeleted(merged.deleted);
-    var env2 = await encryptEnvelopeV2(merged);
-    var body = {message:"dache sync "+new Date().toISOString(), content:b64(new TextEncoder().encode(JSON.stringify(env2)))};
-    if (sha) body.sha = sha;
-    var put = await fetch(api, {method:"PUT", headers:headers, body:JSON.stringify(body)});
-    if (!put.ok){ if (st) st.textContent = "写回云端失败（"+put.status+"），本机已合并远端数据。"; if (window.renderRecords) renderRecords(); return; }
-    if (st) st.textContent = "同步完成：本机共 "+merged.readings.length+" 条记录，已加密写回 "+cfg.owner+"/"+cfg.repo+"。";
+    if (sv && sv.message && st) st.textContent = sv.message;
+    // 再同步记录：409 冲突时重读、重新合并后重试一次
+    var last = null;
+    for (var attempt=0; attempt<2; attempt++){
+      last = await syncRecordsOnce(api, headers, cfg);
+      if (last.ok) break;
+      if (last.status === 409 && attempt === 0) continue;
+      break;
+    }
+    if (st) st.textContent = last.message;
     if (window.renderRecords) renderRecords();
-  }catch(e){ if (st) st.textContent = "同步失败："+e.message+"（没网或 GitHub 连不上时先存本机，有网再同步）。"; }
+  }catch(e){
+    if (st) st.textContent = "同步失败："+e.message+"（没网或 GitHub 连不上时先存本机，有网再同步）。";
+    if (window.renderRecords) renderRecords();
+  }
   finally{ syncBusy = false; }
 }
 /* 自动同步：未解锁或无令牌时 runSync 内部会直接返回；保留入口供记录变更时调用 */
@@ -1623,7 +1799,7 @@ function renderRecords(){
   if (!total) h += '<p class="dim" style="margin-top:18px">还没有记录。去「起卦」起一卦，填上问题就能存第一条。</p>';
   h += arr.map(function(r){
     var ben = hexByName(r.benName);
-    return '<article class="rec" data-rid="'+r.id+'">'
+    return '<article class="rec" data-rid="'+esc(r.id)+'">'
       + '<div style="display:flex;gap:14px;align-items:flex-start">'
       + (ben ? '<div style="flex-shrink:0;padding-top:4px">'+hexFigure(ben,false,r.movingLine)+'</div>' : "")
       + '<div style="flex:1;min-width:0"><p style="margin:0"><b>'+esc(r.question)+'</b></p>'
@@ -1657,13 +1833,21 @@ function renderRecords(){
     try{
       var obj = JSON.parse(await f.text());
       var list = Array.isArray(obj) ? obj : (obj.readings||[]);
+      if (!Array.isArray(list)) throw new Error("备份文件格式不对");
       var fp = function(r){ return [r.question,r.createdAt,r.benName,r.movingLine].join("|"); };
       var arr2 = getReadings(); var seen = {}; arr2.forEach(function(r){ seen[fp(r)]=1; });
       var added = 0;
       list.forEach(function(r){
-        if (!r || !r.question || !r.benName) return;
+        if (!r || typeof r !== "object") return;
+        if (!r.question || !r.benName) return;
+        // 字段强转字符串：导入的 JSON 可能带非字符串值，会破坏渲染
+        ["question","benName","method","benFullName","bianFullName","movingLabel","judgment","outcome","review","verification","createdAt"].forEach(function(f2){ if (r[f2] != null) r[f2] = String(r[f2]); });
+        if (typeof r.movingLine === "string"){ var ml = parseInt(r.movingLine, 10); r.movingLine = (ml >= 1 && ml <= 6) ? ml : null; }
         if (seen[fp(r)]) return; seen[fp(r)]=1;
-        r.id = r.id || uid(); r.updatedAt = r.updatedAt || r.createdAt || nowISO();
+        // id 只允许字母数字、下划线、连字符；不合规的重新生成（防 XSS 与注入）
+        if (typeof r.id !== "string" || !/^[\w-]+$/.test(r.id)) r.id = uid();
+        r.updatedAt = r.updatedAt || r.createdAt || nowISO();
+        if (typeof r.updatedAt !== "string") r.updatedAt = String(r.updatedAt);
         r.verification = r.verification || "待定"; arr2.push(r); added++;
       });
       arr2.sort(function(a,b){ return (b.createdAt||"").localeCompare(a.createdAt||""); });

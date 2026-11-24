@@ -15,8 +15,8 @@ android {
         applicationId = "com.dache.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     // BuildConfig.VERSION_NAME 供原生桥 getAppVersion() 使用；AGP 8 默认行为之外再显式打开一次。
