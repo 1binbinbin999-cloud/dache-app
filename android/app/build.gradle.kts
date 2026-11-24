@@ -86,9 +86,10 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     // WebViewAssetLoader（androidx.webkit 1.5.0+ 才有，用 1.8.0）
     implementation("androidx.webkit:webkit:1.8.0")
-    // EncryptedSharedPreferences / MasterKey（1.0.0 稳定版；1.1.0 已把这套 API 标记为 deprecated，
-    // 且任务明确要求这套写法，故锁定 1.0.0）
-    implementation("androidx.security:security-crypto:1.0.0")
+    // EncryptedSharedPreferences / MasterKey：MasterKey 类在 1.0.0 里不存在，
+    // 是 1.1.0-alpha01 才引入的；1.1.0 已是稳定版（Google Maven metadata 确认），
+    // 之前锁 1.0.0 导致 MainActivity.kt 里 MasterKey 找不到，编译失败，故升到 1.1.0。
+    implementation("androidx.security:security-crypto:1.1.0")
 }
 
 // 构建时把 ../web/（相对本 build 脚本所在 app/ 目录是 ../../web/）的全部内容同步进
