@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：金色圆环 + 金色圆点（占位图标，v0.1.0；正式图标以后替换本文件即可） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M54,16a38,38 0 1,0 0.1,0Z"
+        android:strokeWidth="5"
+        android:strokeColor="#D4AF37" />
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M54,38a16,16 0 1,0 0.1,0Z" />
+</vector>

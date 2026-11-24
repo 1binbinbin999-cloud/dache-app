@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 玄夜深色 + 金色，与网页版风格一致 -->
+    <color name="ic_launcher_background">#0B1020</color>
+</resources>

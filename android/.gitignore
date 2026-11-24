@@ -1,0 +1,13 @@
+# 构建产物与本地配置
+.gradle/
+build/
+local.properties
+*.iml
+.DS_Store
+
+# Gradle 构建时从 ../web/ 同步生成的 APK 内 bundle（约 24MB，不入库，每次构建重新生成）
+app/src/main/assets/
+
+# 签名 keystore（绝不入库；CI 用 Secrets 注入环境变量）
+*.keystore
+*.jks

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- 允许在非 Windows 机器上以 Windows 为目标做交叉编译检查；正式发布仍在 Windows CI 上跑。 -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>Dache</AssemblyName>
+    <RootNamespace>Dache</RootNamespace>
+    <Product>大车</Product>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Web.WebView2 1.0.4370.26：2026-11-24 在 NuGet 官方 API 上核实的最新稳定版。 -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      把正式版网页 bundle（../web/）全部嵌进程序集。
+      LogicalName 固定资源名，保留目录结构，例如：
+        web/index.html                 -> "web.index.html"
+        web/assets/ni/ni-1-qian.jpg    -> "web.assets\ni\ni-1-qian.jpg"
+      运行时 BundleExtractor 按 "web." 前缀还原目录解压。
+      注意：bundle 里所有 73 个文件的文件名均不重名（2026-11-24 核对过），
+      即使 LogicalName 在某台构建机上被忽略，也不会出现同名资源冲突。
+    -->
+    <EmbeddedResource Include="..\web\**\*" LogicalName="web.%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
