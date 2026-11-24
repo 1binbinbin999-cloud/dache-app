@@ -862,7 +862,7 @@ $("setup-submit").addEventListener("click", async function(){
   var token=$("setup-token").value.trim();
   if (!pwd1 || pwd1.length < 8){ err.textContent = "进入密码至少 8 位。"; return; }
   if (pwd1 !== pwd2){ err.textContent = "两次输入的进入密码不一致。"; return; }
-  if (!rec1 || rec1.length < 8){ err.textContent = "恢复码至少 8 位（恢复码由你自己定，忘密码时用它重置）。"; return; }
+  if (!rec1){ err.textContent = "先输入恢复码（恢复码由你自己定，忘密码时用它重置）。"; return; }
   if (rec1 !== rec2){ err.textContent = "两次输入的恢复码不一致。"; return; }
   if (pwd1 === rec1){ err.textContent = "恢复码不要和进入密码设成一样。"; return; }
   var btn = $("setup-submit"); btn.disabled = true; btn.textContent = "正在生成保险库…";
