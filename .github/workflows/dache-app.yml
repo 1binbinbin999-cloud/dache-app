@@ -1,7 +1,7 @@
-# 大车 APP 打包：Android APK，v0.1.3（只做安卓；Windows 版这次不构建、不发版）
+# 大车 APP 打包：Android APK，v0.1.4（只做安卓；Windows 版这次不构建、不发版）
 # 触发：android/、web/、windows/ 或本文件有推送时跑；也可手动跑（Actions 页 workflow_dispatch）。
-# 注意：版本号 v0.1.3 在本文件里写死（release job 的 tag_name 与文件名）。
-# 下一版发版时，把 v0.1.3 / dache-0.1.3.* / versionCode 一起改掉。
+# 注意：版本号 v0.1.4 在本文件里写死（release job 的 tag_name 与文件名）。
+# 下一版发版时，把 v0.1.4 / dache-0.1.4.* / versionCode 一起改掉。
 name: dache-app
 
 on:
@@ -52,12 +52,12 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace
       - name: Stage APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk dache-0.1.3.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk dache-0.1.4.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: dache-0.1.3.apk
-          path: dache-0.1.3.apk
+          name: dache-0.1.4.apk
+          path: dache-0.1.4.apk
           if-no-files-found: error
 
   release:
@@ -69,14 +69,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
-      - name: Create Release v0.1.3
+      - name: Create Release v0.1.4
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.3
-          name: 大车 v0.1.3
+          tag_name: v0.1.4
+          name: 大车 v0.1.4
           body: |
-            大车 v0.1.3（安卓）：修两处。①解卦能正常显示了（之前是应用自己的安全规则拦了内嵌的卦象数据加载，不是网络问题）；②实验室能导入 xlsx 文件了（补了文件选择器）。
+            大车 v0.1.4（安卓）：修一处——解卦里的 64 张倪海厦卦图能正常显示了（之前瘦身时图转成了 WebP，但应用里内嵌的数据还写着 .jpg，图全都找不到）。
             首次打开需设置密码（至少 8 位）与恢复码（由你自己定）；以后每次进入都要输密码；同步需在首次设置里粘贴 dache-sync 令牌（可跳过）。
-            安装：下载 APK 安装（需允许安装未知来源应用）；已装 v0.1.2 的直接覆盖安装，记录不丢。
+            安装：下载 APK 安装（需允许安装未知来源应用）；已装 v0.1.3 的直接覆盖安装，记录不丢。
           files: |
-            dist/dache-0.1.3.apk/dache-0.1.3.apk
+            dist/dache-0.1.4.apk/dache-0.1.4.apk
