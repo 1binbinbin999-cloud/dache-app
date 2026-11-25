@@ -1,6 +1,7 @@
 package com.dache.app
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.SharedPreferences
@@ -10,12 +11,14 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
@@ -62,6 +65,34 @@ class MainActivity : AppCompatActivity() {
      * 初始化失败时为 null，桥方法随之静默无操作并记日志，不让壳在启动时直接崩掉。
      */
     private var securePrefs: SharedPreferences? = null
+
+    /**
+     * 文件选择回调：WebView 里 <input type="file"> 全靠它。
+     * 没有 onShowFileChooser，点上传按钮在 WebView 里是没反应的
+     * （2026-11-25 用户报实验室导不进文件，就是缺了这一块）。
+     */
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooserLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val cb = fileChooserCallback
+            fileChooserCallback = null
+            if (cb == null) return@registerForActivityResult
+            if (result.resultCode != Activity.RESULT_OK) {
+                cb.onReceiveValue(null)
+                return@registerForActivityResult
+            }
+            val data = result.data
+            val uris: Array<Uri> = when {
+                data == null -> emptyArray()
+                data.clipData != null -> {
+                    val clip = data.clipData!!
+                    Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+                }
+                data.data != null -> arrayOf(data.data!!)
+                else -> emptyArray()
+            }
+            cb.onReceiveValue(uris)
+        }
 
     @SuppressLint("SetJavaScriptEnabled", "DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,7 +141,25 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
             }
-            webChromeClient = WebChromeClient()
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    view: WebView,
+                    filePathCallback: ValueCallback<Array<Uri>>,
+                    fileChooserParams: FileChooserParams
+                ): Boolean {
+                    // 上一次没交掉的回调先取消掉，避免 WebView 一直等。
+                    fileChooserCallback?.onReceiveValue(null)
+                    fileChooserCallback = filePathCallback
+                    return try {
+                        fileChooserLauncher.launch(fileChooserParams.createIntent())
+                        true
+                    } catch (e: ActivityNotFoundException) {
+                        Log.w(TAG, "没有应用能处理文件选择", e)
+                        fileChooserCallback = null
+                        false
+                    }
+                }
+            }
             addJavascriptInterface(SecureBridge(), "DacheSecure")
             addJavascriptInterface(NativeBridge(), "DacheNative")
         }

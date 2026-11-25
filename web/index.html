@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark" />
 <!-- CSP：内联脚本/样式仍放行（本应用 5 段脚本里 4 段是内联的），只禁插件、限制 base、限制资源来源。导入备份的 XSS 主防线是 esc + 字段校验。 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob:; script-src 'unsafe-inline' 'self' https:; style-src 'unsafe-inline' 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; connect-src 'self' https:;" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob:; script-src 'unsafe-inline' 'self' https:; style-src 'unsafe-inline' 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; connect-src 'self' https: data:;" />
 <link rel="icon" href="data:," />
 <title>大车</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />

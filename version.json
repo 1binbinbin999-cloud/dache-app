@@ -1,1 +1,1 @@
-{"android":{"notes":"大车 v0.1.2（安卓）：恢复码不设长度要求，按你已定的用；进入密码仍至少 8 位。","url":"https://github.com/1binbinbin999-cloud/dache-app/releases/download/v0.1.2/dache-0.1.2.apk"},"notes":"大车 v0.1.2（安卓）：恢复码不设长度要求，按你已定的用。首次打开需设置密码（至少 8 位）与恢复码（由你自己定）。","version":"0.1.2"}
+{"android":{"notes":"大车 v0.1.3（安卓）：修两处——解卦能正常显示了（之前是应用自己的安全规则拦了内嵌的卦象数据加载，不是网络问题）；实验室能导入 xlsx 文件了（补了文件选择器）。","url":"https://github.com/1binbinbin999-cloud/dache-app/releases/download/v0.1.3/dache-0.1.3.apk"},"notes":"大车 v0.1.3（安卓）：修两处——解卦能正常显示了；实验室能导入 xlsx 文件了。首次打开需设置密码（至少 8 位）与恢复码（由你自己定）。","version":"0.1.3"}
