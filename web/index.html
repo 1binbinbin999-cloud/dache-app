@@ -287,6 +287,18 @@ footer{border-top:1px solid var(--border);margin-top:48px;padding:18px 0;color:v
       .chip[aria-pressed="true"] .n { color: var(--gold-ink); opacity: .75; }
       .chip.zero { opacity: .45; }
 
+      /* 粗分档（大档）：玄夜·暗金分层 */
+      .big-head { display: flex; align-items: center; gap: 8px; margin: 10px 0 8px; font-size: 11px; font-weight: 500; color: #b59643; }
+      .big-head::after { content: ""; flex: 1; height: 1px; background: #394357; opacity: .55; }
+      .big-row { display: flex; gap: 8px; }
+      .big-chip { flex: 1 1 0; height: 40px; border-radius: 7px; border: 1px solid #394357; background: #141c2d; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 4px; min-width: 0; }
+      .big-chip .big-range { font-size: 14px; font-weight: 500; color: #ede4cb; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+      .big-chip .big-n { font-size: 11px; font-weight: 400; color: #a8afbd; line-height: 1.25; white-space: nowrap; }
+      .big-chip:hover { background: #202a3c; border-color: #827044; transition: background 150ms, border-color 150ms; }
+      .big-chip[aria-pressed="true"] { background: #292a27; border-color: #b59643; }
+      .big-chip[aria-pressed="true"] .big-range { color: #e6c875; font-weight: 600; }
+      .big-chip[aria-pressed="true"] .big-n { color: #d2c7a9; }
+
       .btn {
         border: 1px solid var(--line);
         background: var(--card2);
@@ -1969,8 +1981,14 @@ function renderLibrary(){
             { v: "0", t: "0–1%" }, { v: "1", t: "1–2%" }, { v: "2", t: "2–3%" }, { v: "3", t: "3–4%" },
             { v: "4", t: "4–5%" }, { v: "5", t: "5–6%" }, { v: "6", t: "6–7%" }, { v: "7", t: "7–8%" },
             { v: "8", t: "8–9%" }, { v: "9", t: "9% 以上" }],
+          bigOpts: [band("BINB1", "0–5", 0, 5), band("BINB2", "5 以上", 5, 10)],
           match: function (r, o) {
             if (o.v === "all") return true;
+            if (o.v === "BINB1" || o.v === "BINB2") {
+              if (r.b === null || r.b === undefined || isNaN(r.b)) return false;
+              if (r.b === -1) return false;
+              return r.b >= o.lo && r.b < o.hi;
+            }
             if (r.b === -1) return false;
             return r.b === parseInt(o.v, 10);
           } },
@@ -1979,21 +1997,25 @@ function renderLibrary(){
             band("h1", "0–1%", 0, 1), band("h2", "1–2%", 1, 2), band("h3", "2–5%", 2, 5),
             band("h4", "5–8%", 5, 8), band("h5", "8–9%", 8, 9), band("h6", "9–10%", 9, 10),
             band("h7", "10% 以上", 10, Infinity)],
+          bigOpts: [band("HB1", "0–5%", 0, 5), band("HB2", "5–10%", 5, 10), band("HB3", "10% 以上", 10, Infinity)],
           match: bandMatch("hs") },
         { key: "lb", no: "第五位", name: "量比", note: "切成档位选",
           opts: [{ v: "all", t: "全部" },
             band("l1", "0–1", 0, 1), band("l2", "1–1.5", 1, 1.5), band("l3", "1.5–2", 1.5, 2),
             band("l4", "2–3", 2, 3), band("l5", "3 以上", 3, Infinity)],
+          bigOpts: [band("LB1", "0–1.5", 0, 1.5), band("LB2", "1.5 以上", 1.5, Infinity)],
           match: bandMatch("lb") },
         { key: "wb", no: "第六位", name: "委比", note: "单位 %",
           opts: [{ v: "all", t: "全部" },
             band("w1", "< 0", -Infinity, 0), band("w2", "0–10", 0, 10), band("w3", "10–40", 10, 40),
             band("w4", "40–50", 40, 50), band("w5", "50 以上", 50, Infinity)],
+          bigOpts: [band("WB1", "负数", -Infinity, 0), band("WB2", "0–40", 0, 40), band("WB3", "40 以上", 40, Infinity)],
           match: bandMatch("wb") },
         { key: "op", no: "第七位", name: "明天开盘涨跌", note: "T+1 开盘涨幅，单位 %；五档互不重叠，一只票只落一档，0 就是平开",
           opts: [{ v: "all", t: "全部" },
             band("o3", "跌超 1%", -Infinity, -1), band("o4", "小跌 −1~0%（不含 0）", -1, 0),
             band("oFlat", "平开 =0%", 0, 0), band("o5", "小涨 0~1%（不含 0）", 0, 1), band("o6", "涨超 1%", 1, Infinity)],
+          bigOpts: [band("OPB1", "负", -Infinity, 0), band("OPB2", "平", 0, 0), band("OPB3", "正", 0, Infinity)],
           match: function (r, o) {
             if (o.v === "all") return true;
             var v = r.op;
@@ -2003,11 +2025,15 @@ function renderLibrary(){
             if (o.v === "oFlat") return v === 0;
             if (o.v === "o5") return v > 0 && v < 1;
             if (o.v === "o6") return v >= 1;
+            if (o.v === "OPB1") return v < 0;
+            if (o.v === "OPB2") return v === 0;
+            if (o.v === "OPB3") return v > 0;
             return v >= o.lo && v < o.hi;
           } }
       ];
       function optOf(vd) {
         for (var i = 0; i < vd.opts.length; i++) if (vd.opts[i].v === state.sel[vd.key]) return vd.opts[i];
+        if (vd.bigOpts) for (var i = 0; i < vd.bigOpts.length; i++) if (vd.bigOpts[i].v === state.sel[vd.key]) return vd.bigOpts[i];
         return vd.opts[0];
       }
 
@@ -2042,6 +2068,7 @@ function renderLibrary(){
       }
       function optByVal(vd, v) {
         for (var i = 0; i < vd.opts.length; i++) if (vd.opts[i].v === v) return vd.opts[i];
+        if (vd.bigOpts) for (var i = 0; i < vd.bigOpts.length; i++) if (vd.bigOpts[i].v === v) return vd.bigOpts[i];
         return vd.opts[0];
       }
       // 组合写成一句话，跟用户举的格式一样：大盘涨，A 组，0–1%，换手率 0–1%，量比 0–1，委比 0–10，开盘涨
@@ -2141,7 +2168,19 @@ function renderLibrary(){
               '" data-v="' + o.v + '" aria-pressed="' + (state.sel[vd.key] === o.v) + '">' + o.t +
               '<span class="n">' + cnt + "</span></button>";
           });
-          html += "</div></div>";
+          html += "</div>";
+          if (vd.bigOpts) {
+            html += '<div class="big-head">粗分档</div><div class="big-row" data-var="' + vd.key + '">';
+            vd.bigOpts.forEach(function (o) {
+              var cnt = 0;
+              state.data.forEach(function (r) {
+                if (matchesExcept(r, vd.key) && vd.match(r, o)) cnt++;
+              });
+              html += '<button type="button" class="big-chip" data-v="' + o.v + '" aria-pressed="' + (state.sel[vd.key] === o.v) + '"><span class="big-range">' + o.t + '</span><span class="big-n">剩余 ' + cnt + "</span></button>";
+            });
+            html += "</div>";
+          }
+          html += "</div>";
         });
         $("varBlocks").innerHTML = html;
         Array.prototype.forEach.call($("varBlocks").querySelectorAll(".chip-row"), function (row) {
@@ -2150,6 +2189,15 @@ function renderLibrary(){
             btn.addEventListener("click", function () {
               state.sel[key] = btn.getAttribute("data-v");
               if (key === "grp" && state.sel.grp === "C") state.sel.bin = "all";
+              renderAll();
+            });
+          });
+        });
+        Array.prototype.forEach.call($("varBlocks").querySelectorAll(".big-row"), function (row) {
+          var key = row.getAttribute("data-var");
+          Array.prototype.forEach.call(row.querySelectorAll(".big-chip"), function (btn) {
+            btn.addEventListener("click", function () {
+              state.sel[key] = btn.getAttribute("data-v");
               renderAll();
             });
           });

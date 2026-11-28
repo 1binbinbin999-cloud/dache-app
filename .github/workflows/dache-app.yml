@@ -1,7 +1,7 @@
-# 大车 APP 打包：Android APK，v0.1.5（只做安卓；Windows 版这次不构建、不发版）
+# 大车 APP 打包：Android APK，v0.1.6（只做安卓；Windows 版这次不构建、不发版）
 # 触发：android/、web/、windows/ 或本文件有推送时跑；也可手动跑（Actions 页 workflow_dispatch）。
-# 注意：版本号 v0.1.5 在本文件里写死（release job 的 tag_name 与文件名）。
-# 下一版发版时，把 v0.1.5 / dache-0.1.5.* / versionCode 一起改掉。
+# 注意：版本号 v0.1.6 在本文件里写死（release job 的 tag_name 与文件名）。
+# 下一版发版时，把 v0.1.6 / dache-0.1.6.* / versionCode 一起改掉。
 name: dache-app
 
 on:
@@ -52,12 +52,12 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace
       - name: Stage APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk dache-0.1.5.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk dache-0.1.6.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: dache-0.1.5.apk
-          path: dache-0.1.5.apk
+          name: dache-0.1.6.apk
+          path: dache-0.1.6.apk
           if-no-files-found: error
 
   release:
@@ -69,14 +69,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
-      - name: Create Release v0.1.5
+      - name: Create Release v0.1.6
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.5
-          name: 大车 v0.1.5
+          tag_name: v0.1.6
+          name: 大车 v0.1.6
           body: |
-            大车 v0.1.5（安卓）：新图标——GPT 画的道·大车（金色太极与道路铺满画布、高清）。
+            大车 v0.1.6（安卓）：新图标——浅色抽象无汉字（黑角已修）；实验室大档同步（换手率/量比/委比/区间/明天开盘粗分档）。
             首次打开需设置密码（至少 8 位）与恢复码（由你自己定）；以后每次进入都要输密码；同步需在首次设置里粘贴 dache-sync 令牌（可跳过）。
-            安装：下载 APK 安装（需允许安装未知来源应用）；已装 v0.1.4 的直接覆盖安装，记录不丢。
+            安装：下载 APK 安装（需允许安装未知来源应用）；已装 v0.1.5 的直接覆盖安装，记录不丢。
           files: |
-            dist/dache-0.1.5.apk/dache-0.1.5.apk
+            dist/dache-0.1.6.apk/dache-0.1.6.apk
